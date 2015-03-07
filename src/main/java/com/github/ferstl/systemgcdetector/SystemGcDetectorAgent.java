@@ -17,30 +17,7 @@ import javassist.NotFoundException;
 public class SystemGcDetectorAgent {
 
   public static void premain(String agentArgs, Instrumentation inst) {
-    inst.addTransformer(new ClassFileTransformer() {
-
-      @Override
-      public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined, ProtectionDomain protectionDomain, byte[] classfileBuffer)
-      throws IllegalClassFormatException {
-        System.err.println(className);
-
-        if("java/lang/System".equals(className)) {
-          ClassPool classPool = ClassPool.getDefault();
-          try {
-            CtClass systemClass = classPool.get("java.lang.System");
-            CtMethod gc = systemClass.getDeclaredMethod("gc");
-            gc.insertBefore("System.out.println(\"System.gc() called\\n\"); new Exception().printStackTrace();");
-            byte[] bytecode = systemClass.toBytecode();
-            systemClass.detach();
-            return bytecode;
-          } catch (NotFoundException | CannotCompileException | IOException e) {
-            throw new RuntimeException(e);
-          }
-        }
-
-        return classfileBuffer;
-      }
-    }, true);
+    inst.addTransformer(new SystemGcRewriter(), true);
 
     try {
       inst.retransformClasses(System.class);
@@ -48,5 +25,28 @@ public class SystemGcDetectorAgent {
       throw new RuntimeException(e);
     }
 
+  }
+
+  private static class SystemGcRewriter implements ClassFileTransformer {
+
+    @Override
+    public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined, ProtectionDomain protectionDomain, byte[] classfileBuffer)
+    throws IllegalClassFormatException {
+      if("java/lang/System".equals(className)) {
+        ClassPool classPool = ClassPool.getDefault();
+        try {
+          CtClass systemClass = classPool.get("java.lang.System");
+          CtMethod gc = systemClass.getDeclaredMethod("gc");
+          gc.insertBefore("System.out.println(\"System.gc() called\\n\"); new Exception().printStackTrace();");
+          byte[] bytecode = systemClass.toBytecode();
+          systemClass.detach();
+          return bytecode;
+        } catch (NotFoundException | CannotCompileException | IOException e) {
+          throw new RuntimeException(e);
+        }
+      }
+
+      return classfileBuffer;
+    }
   }
 }
