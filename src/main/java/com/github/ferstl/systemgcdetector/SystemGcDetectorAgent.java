@@ -2,7 +2,6 @@ package com.github.ferstl.systemgcdetector;
 
 import java.io.IOException;
 import java.lang.instrument.ClassFileTransformer;
-import java.lang.instrument.IllegalClassFormatException;
 import java.lang.instrument.Instrumentation;
 import java.lang.instrument.UnmodifiableClassException;
 import java.security.ProtectionDomain;
@@ -30,14 +29,13 @@ public class SystemGcDetectorAgent {
   private static class SystemGcRewriter implements ClassFileTransformer {
 
     @Override
-    public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined, ProtectionDomain protectionDomain, byte[] classfileBuffer)
-    throws IllegalClassFormatException {
+    public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined, ProtectionDomain protectionDomain, byte[] classfileBuffer) {
       if("java/lang/System".equals(className)) {
         ClassPool classPool = ClassPool.getDefault();
         try {
           CtClass systemClass = classPool.get("java.lang.System");
           CtMethod gc = systemClass.getDeclaredMethod("gc");
-          gc.insertBefore("System.out.println(\"System.gc() called\\n\"); new Exception().printStackTrace();");
+          gc.insertBefore("System.out.println(\"System.gc() called\\n\"); Thread.dumpStack();");
           byte[] bytecode = systemClass.toBytecode();
           systemClass.detach();
           return bytecode;
