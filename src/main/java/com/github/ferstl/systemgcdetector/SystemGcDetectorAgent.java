@@ -61,9 +61,9 @@ public class SystemGcDetectorAgent {
     }
 
     private boolean isGcCall(String owner, String name, String desc) {
-      return ("java/lang/Runtime".equals(owner) || "java/lang/System".equals(owner))
-          && "gc".equals(name)
-          && "()V".equals(desc);
+      return "gc".equals(name)
+          && "()V".equals(desc)
+          && ("java/lang/Runtime".equals(owner) || "java/lang/System".equals(owner));
     }
 
     private void addGcCallStackDump() {
