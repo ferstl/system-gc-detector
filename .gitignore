@@ -2,5 +2,4 @@
 .project
 .idea/
 target/
-.settings/
 *.iml
