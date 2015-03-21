@@ -2,7 +2,6 @@ package com.github.ferstl.systemgcdetector;
 
 import java.lang.instrument.Instrumentation;
 import java.security.ProtectionDomain;
-
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
@@ -27,6 +26,7 @@ public class SystemGcDetectorAgent {
 
 
   static class GcCallClassVisitor extends ClassVisitor {
+
     public GcCallClassVisitor(ClassWriter writer) {
       super(Opcodes.ASM5, writer);
     }
