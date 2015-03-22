@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.Charset;
+import java.nio.file.Paths;
 import com.sun.tools.attach.VirtualMachine;
 
 
@@ -14,9 +15,10 @@ public final class AgentLoader {
   public static void main(String[] args) {
     String pid = getPid(args);
 
+    String agentPath = Paths.get(System.getProperty("user.dir", "."), "target", "agent.jar").toAbsolutePath().toString();
     try {
       VirtualMachine vm = VirtualMachine.attach(pid);
-      vm.loadAgent("target/agent.jar");
+      vm.loadAgent(agentPath);
       vm.detach();
       System.out.println("Agent attached");
     } catch (Exception e) {
