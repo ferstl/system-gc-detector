@@ -1,7 +1,9 @@
 package com.github.ferstl.systemgcdetector;
 
 import java.lang.instrument.Instrumentation;
+import java.lang.instrument.UnmodifiableClassException;
 import java.security.ProtectionDomain;
+import java.util.Arrays;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
@@ -10,7 +12,25 @@ import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.commons.InstructionAdapter;
 
 
-public class SystemGcDetectorAgent {
+public final class SystemGcDetectorAgent {
+
+  private SystemGcDetectorAgent() {}
+
+  public static void agentmain(String agentArgs, Instrumentation inst) {
+    inst.addTransformer(SystemGcDetectorAgent::transformGcMethods, true);
+    try {
+      // Transforming classes from the java package would crash the JVM
+      Class<?>[] retransformableClasses = Arrays.stream(inst.getAllLoadedClasses())
+          .filter(inst::isModifiableClass)
+          .filter(c -> !c.getName().startsWith("java."))
+          .toArray(Class[]::new);
+      inst.retransformClasses(retransformableClasses);
+
+    } catch (UnmodifiableClassException e) {
+      System.err.println("Unmodifiable class");
+      e.printStackTrace();
+    }
+  }
 
   public static void premain(String agentArgs, Instrumentation inst) {
     inst.addTransformer(SystemGcDetectorAgent::transformGcMethods, true);
