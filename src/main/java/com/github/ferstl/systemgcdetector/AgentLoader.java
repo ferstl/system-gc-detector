@@ -3,7 +3,13 @@ package com.github.ferstl.systemgcdetector;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.lang.reflect.Method;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import com.sun.tools.attach.VirtualMachine;
 
@@ -13,17 +19,26 @@ public final class AgentLoader {
   private AgentLoader() {}
 
   public static void main(String[] args) {
+    addToolsJarToClasspath();
     String pid = getPid(args);
+    String agentPath = getAgentPath();
 
-    String agentPath = Paths.get(System.getProperty("user.dir", "."), "target", "agent.jar").toAbsolutePath().toString();
+    attachAgent(pid, agentPath);
+  }
+
+  private static void addToolsJarToClasspath() {
+    Path toolsPath = Paths.get(System.getProperty("java.home", "."), "..", "lib", "tools.jar");
+    if (!Files.exists(toolsPath)) {
+      throw new IllegalStateException("Path to tools.jar not found: " + toolsPath);
+    }
+
     try {
-      VirtualMachine vm = VirtualMachine.attach(pid);
-      vm.loadAgent(agentPath);
-      vm.detach();
-      System.out.println("Agent attached");
+      ClassLoader classLoader = ClassLoader.getSystemClassLoader();
+      Method method = URLClassLoader.class.getDeclaredMethod("addURL", new Class[]{URL.class});
+      method.setAccessible(true);
+      method.invoke(classLoader, new Object[]{toolsPath.toUri().toURL()});
     } catch (Exception e) {
-      System.err.println("Unable to attach");
-      e.printStackTrace();
+      throw new IllegalStateException("Unable to add tools.jar to classpath", e);
     }
   }
 
@@ -42,5 +57,25 @@ public final class AgentLoader {
     }
 
     return args[0];
+  }
+
+  private static String getAgentPath() {
+    try {
+      return Paths.get(AgentLoader.class.getProtectionDomain().getCodeSource().getLocation().toURI()).toString();
+    } catch (URISyntaxException e) {
+      throw new IllegalStateException("Unable to get agent location", e);
+    }
+  }
+
+  private static void attachAgent(String pid, String agentPath) {
+    try {
+      VirtualMachine vm = VirtualMachine.attach(pid);
+      vm.loadAgent(agentPath);
+      vm.detach();
+      System.out.println("Agent attached");
+    } catch (Exception e) {
+      System.err.println("Unable to attach");
+      e.printStackTrace();
+    }
   }
 }
