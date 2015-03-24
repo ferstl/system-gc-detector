@@ -19,11 +19,16 @@ public final class AgentLoader {
   private AgentLoader() {}
 
   public static void main(String[] args) {
-    addToolsJarToClasspath();
-    String pid = getPid(args);
-    String agentPath = getAgentPath();
+    try {
+      addToolsJarToClasspath();
+      String pid = getPid(args);
+      String agentPath = getAgentPath();
 
-    attachAgent(pid, agentPath);
+      attachAgent(pid, agentPath);
+    } catch (Exception e) {
+      e.printStackTrace();
+      System.exit(1);
+    }
   }
 
   private static void addToolsJarToClasspath() {
@@ -68,14 +73,21 @@ public final class AgentLoader {
   }
 
   private static void attachAgent(String pid, String agentPath) {
+    VirtualMachine vm;
     try {
-      VirtualMachine vm = VirtualMachine.attach(pid);
+      vm = VirtualMachine.attach(pid);
       vm.loadAgent(agentPath);
-      vm.detach();
       System.out.println("Agent attached");
+
+      try {
+        vm.detach();
+      } catch (IOException e) {
+        throw new IllegalStateException("Unable to detach", e);
+      }
+
     } catch (Exception e) {
-      System.err.println("Unable to attach");
-      e.printStackTrace();
+      throw new IllegalStateException("Unable to attach", e);
     }
+
   }
 }
