@@ -56,8 +56,7 @@ public final class AgentLoader {
       try {
         return br.readLine();
       } catch (IOException e) {
-        System.err.println("Unable to read console");
-        throw new IllegalStateException(e);
+        throw new IllegalStateException("Unable to read console", e);
       }
     }
 
