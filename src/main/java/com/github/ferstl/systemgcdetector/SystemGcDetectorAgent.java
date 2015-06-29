@@ -1,15 +1,16 @@
 package com.github.ferstl.systemgcdetector;
 
+import java.io.IOException;
 import java.lang.instrument.Instrumentation;
 import java.lang.instrument.UnmodifiableClassException;
+import java.lang.reflect.Modifier;
 import java.security.ProtectionDomain;
 import java.util.Arrays;
-import org.objectweb.asm.ClassReader;
-import org.objectweb.asm.ClassVisitor;
-import org.objectweb.asm.ClassWriter;
-import org.objectweb.asm.MethodVisitor;
-import org.objectweb.asm.Opcodes;
-import org.objectweb.asm.commons.InstructionAdapter;
+import javassist.CannotCompileException;
+import javassist.ClassPool;
+import javassist.CtClass;
+import javassist.CtMethod;
+import javassist.NotFoundException;
 
 
 public final class SystemGcDetectorAgent {
@@ -33,65 +34,50 @@ public final class SystemGcDetectorAgent {
   }
 
   public static void premain(String agentArgs, Instrumentation inst) {
+    if (!inst.isRetransformClassesSupported()) {
+      System.err.println("class retransformation not supported");
+      return;
+    }
+
     inst.addTransformer(SystemGcDetectorAgent::transformGcMethods, true);
+
+    try {
+      inst.retransformClasses(System.class, Runtime.class);
+    } catch (UnmodifiableClassException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   static byte[] transformGcMethods(ClassLoader loader, String className, Class<?> classBeingRedefined, ProtectionDomain protectionDomain, byte[] classfileBuffer) {
-    ClassReader reader = new ClassReader(classfileBuffer);
-    ClassWriter writer = new ClassWriter(reader, 0);
-    GcCallClassVisitor visitor = new GcCallClassVisitor(writer);
-    reader.accept(visitor, 0);
-    return writer.toByteArray();
-  }
-
-
-  static class GcCallClassVisitor extends ClassVisitor {
-
-    public GcCallClassVisitor(ClassWriter writer) {
-      super(Opcodes.ASM5, writer);
-    }
-
-    @Override
-    public MethodVisitor visitMethod(int access, String name, String desc, String signature, String[] exceptions) {
-      MethodVisitor visitor = super.visitMethod(access, name, desc, signature, exceptions);
-      return new GcCallMethodVisitor(visitor);
-    }
-  }
-
-  static class GcCallMethodVisitor extends InstructionAdapter {
-
-    public GcCallMethodVisitor(MethodVisitor visitor) {
-      super(Opcodes.ASM5, visitor);
-    }
-
-    @Override
-    public void invokevirtual(String owner, String name, String desc, boolean itf) {
-      super.invokevirtual(owner, name, desc, itf);
-      if (isGcCall(owner, name, desc)) {
-        addGcCallStackDump();
+    if ("java/lang/System".equals(className)) {
+      ClassPool classPool = ClassPool.getDefault();
+      try {
+        CtClass systemClass = classPool.get("java.lang.System");
+        CtMethod gc = systemClass.getDeclaredMethod("gc");
+        gc.setBody("{ System.out.println(\"System.gc() called\\n\"); Thread.dumpStack(); }");
+        byte[] bytecode = systemClass.toBytecode();
+        systemClass.detach();
+        return bytecode;
+      } catch (NotFoundException | CannotCompileException | IOException e) {
+        throw new RuntimeException(e);
+      }
+    } else if ("java/lang/Runtime".equals(className)) {
+      ClassPool classPool = ClassPool.getDefault();
+      try {
+        CtClass runtimeClass = classPool.get("java.lang.Runtime");
+        CtMethod gc = runtimeClass.getDeclaredMethod("gc");
+        // remove the native flag
+        gc.setModifiers(Modifier.PUBLIC);
+        gc.setBody("{ System.out.println(\"Runtime.gc() called\\n\"); Thread.dumpStack(); }");
+        byte[] bytecode = runtimeClass.toBytecode();
+        runtimeClass.detach();
+        return bytecode;
+      } catch (NotFoundException | CannotCompileException | IOException e) {
+        throw new RuntimeException(e);
       }
     }
 
-    @Override
-    public void invokestatic(String owner, String name, String desc, boolean itf) {
-      super.invokestatic(owner, name, desc, itf);
-      if (isGcCall(owner, name, desc)) {
-        addGcCallStackDump();
-      }
-    }
-
-    private boolean isGcCall(String owner, String name, String desc) {
-      return "gc".equals(name)
-          && "()V".equals(desc)
-          && ("java/lang/Runtime".equals(owner) || "java/lang/System".equals(owner));
-    }
-
-    private void addGcCallStackDump() {
-      getstatic("java/lang/System", "err", "Ljava/io/PrintStream;");
-      aconst("GC invocation detected. Stack dump:");
-      invokevirtual("java/io/PrintStream", "println", "(Ljava/lang/String;)V", false);
-      invokestatic("java/lang/Thread", "dumpStack", "()V", false);
-    }
+    return classfileBuffer;
   }
 
 }
